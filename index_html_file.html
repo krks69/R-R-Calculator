@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Trade Calculator">
+    <title>Trading Risk Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen">
+    <div id="app" class="p-6"></div>
+
+    <script>
+        const assetPresets = {
+            forex: { name: 'Forex (Standard Lot)', contractSize: 100000 },
+            forexMini: { name: 'Forex (Mini Lot)', contractSize: 10000 },
+            gold: { name: 'Gold (XAU/USD)', contractSize: 100 },
+            silver: { name: 'Silver (XAG/USD)', contractSize: 5000 },
+            bitcoin: { name: 'Bitcoin (BTC/USD)', contractSize: 1 },
+            ethereum: { name: 'Ethereum (ETH/USD)', contractSize: 1 },
+            solana: { name: 'Solana (SOL/USD)', contractSize: 1 }
+        };
+
+        let state = {
+            asset: 'forex',
+            lotSize: '',
+            customContractSize: '',
+            entryPrice: '',
+            stopLoss: '',
+            takeProfit: '',
+            tradeType: 'long'
+        };
+
+        function getContractSize() {
+            if (state.customContractSize) return parseFloat(state.customContractSize);
+            return assetPresets[state.asset].contractSize;
+        }
+
+        function calculateRisk() {
+            const lot = parseFloat(state.lotSize);
+            const contract = getContractSize();
+            const entry = parseFloat(state.entryPrice);
+            const sl = parseFloat(state.stopLoss);
+            const tp = parseFloat(state.takeProfit);
+
+            if (!lot || !contract || !entry || !sl || !tp) return null;
+
+            const positionSize = lot * contract;
+            
+            let risk, reward;
+            if (state.tradeType === 'long') {
+                risk = (entry - sl) * positionSize;
+                reward = (tp - entry) * positionSize;
+            } else {
+                risk = (sl - entry) * positionSize;
+                reward = (entry - tp) * positionSize;
+            }
+
+            const rrRatio = reward / risk;
+            const priceRisk = Math.abs(entry - sl);
+            const priceReward = Math.abs(tp - entry);
+
+            return {
+                risk: Math.abs(risk),
+                reward: Math.abs(reward),
+                rrRatio,
+                priceRisk,
+                priceReward,
+                positionSize
+            };
+        }
+
+        function getPriceLabel() {
+            if (state.asset === 'forex' || state.asset === 'forexMini') return 'pips';
+            if (state.asset === 'gold' || state.asset === 'silver') return 'points';
+            return 'price';
+        }
+
+        function getPlaceholder(field) {
+            const placeholders = {
+                bitcoin: { entry: '45000', sl: '44000', tp: '47000' },
+                ethereum: { entry: '2500', sl: '2450', tp: '2650' },
+                solana: { entry: '150', sl: '145', tp: '160' },
+                gold: { entry: '2050.50', sl: '2045.00', tp: '2065.00' },
+                silver: { entry: '24.50', sl: '24.00', tp: '25.50' },
+                default: { entry: '1.08500', sl: '1.08000', tp: '1.09500' }
+            };
+            
+            const asset = placeholders[state.asset] || placeholders.default;
+            return `e.g., ${asset[field]}`;
+        }
+
+        function render() {
+            const results = calculateRisk();
+            const app = document.getElementById('app');
+            
+            app.innerHTML = `
+                <div class="max-w-4xl mx-auto">
+                    <div class="bg-slate-800/50 backdrop-blur rounded-2xl shadow-2xl border border-slate-700 p-8">
+                        <div class="flex items-center gap-3 mb-8">
+                            <svg class="text-blue-400" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect>
+                                <rect x="9" y="9" width="6" height="6"></rect>
+                                <line x1="9" y1="1" x2="9" y2="4"></line>
+                                <line x1="15" y1="1" x2="15" y2="4"></line>
+                                <line x1="9" y1="20" x2="9" y2="23"></line>
+                                <line x1="15" y1="20" x2="15" y2="23"></line>
+                                <line x1="20" y1="9" x2="23" y2="9"></line>
+                                <line x1="20" y1="14" x2="23" y2="14"></line>
+                                <line x1="1" y1="9" x2="4" y2="9"></line>
+                                <line x1="1" y1="14" x2="4" y2="14"></line>
+                            </svg>
+                            <h1 class="text-3xl font-bold text-white">Risk/Reward Calculator</h1>
+                        </div>
+
+                        <div class="grid md:grid-cols-2 gap-6 mb-8">
+                            <div class="md:col-span-2">
+                                <label class="block text-sm font-medium text-slate-300 mb-2">Select Asset</label>
+                                <select id="asset" class="w-full bg-slate-700 text-white px-4 py-3 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none">
+                                    ${Object.entries(assetPresets).map(([key, preset]) => 
+                                        `<option value="${key}" ${state.asset === key ? 'selected' : ''}>${preset.name}</option>`
+                                    ).join('')}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-2">Trade Type</label>
+                                <div class="flex gap-3">
+                                    <button id="longBtn" class="flex-1 py-3 px-4 rounded-lg font-medium transition ${state.tradeType === 'long' ? 'bg-green-600 text-white' : 'bg-slate-700 text-slate-300'}">
+                                        Long
+                                    </button>
+                                    <button id="shortBtn" class="flex-1 py-3 px-4 rounded-lg font-medium transition ${state.tradeType === 'short' ? 'bg-red-600 text-white' : 'bg-slate-700 text-slate-300'}">
+                                        Short
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-2">Lot Size</label>
+                                <input type="number" step="0.01" id="lotSize" value="${state.lotSize}" placeholder="e.g., 0.1" 
+                                    class="w-full bg-slate-700 text-white px-4 py-3 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none">
+                            </div>
+
+                            <div class="md:col-span-2">
+                                <label class="block text-sm font-medium text-slate-300 mb-2">
+                                    Contract Size (units per lot) - Default: ${getContractSize().toLocaleString()}
+                                </label>
+                                <input type="number" id="customContractSize" value="${state.customContractSize}" 
+                                    placeholder="Leave empty for default (${getContractSize().toLocaleString()})"
+                                    class="w-full bg-slate-700 text-white px-4 py-3 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-2">Entry Price</label>
+                                <input type="number" step="0.01" id="entryPrice" value="${state.entryPrice}" 
+                                    placeholder="${getPlaceholder('entry')}"
+                                    class="w-full bg-slate-700 text-white px-4 py-3 rounded-lg border border-slate-600 focus:border-blue-500 focus:outline-none">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-2">Stop Loss</label>
+                                <input type="number" step="0.01" id="stopLoss" value="${state.stopLoss}" 
+                                    placeholder="${getPlaceholder('sl')}"
+                                    class="w-full bg-slate-700 text-white px-4 py-3 rounded-lg border border-slate-600 focus:border-red-500 focus:outline-none">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-slate-300 mb-2">Take Profit</label>
+                                <input type="number" step="0.01" id="takeProfit" value="${state.takeProfit}" 
+                                    placeholder="${getPlaceholder('tp')}"
+                                    class="w-full bg-slate-700 text-white px-4 py-3 rounded-lg border border-slate-600 focus:border-green-500 focus:outline-none">
+                            </div>
+                        </div>
+
+                        ${results ? `
+                            <div class="space-y-4">
+                                ${results.rrRatio < 2 ? `
+                                    <div class="bg-red-900/40 border-2 border-red-500 rounded-xl p-6 flex items-start gap-4">
+                                        <svg class="text-red-400 flex-shrink-0 mt-1" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <circle cx="12" cy="12" r="10"></circle>
+                                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                                        </svg>
+                                        <div>
+                                            <h3 class="text-xl font-bold text-red-300 mb-2">Trade Rejected</h3>
+                                            <p class="text-red-200 mb-2">
+                                                This position does not meet the minimum Risk/Reward ratio requirement of 1:2.
+                                            </p>
+                                            <p class="text-red-300 font-semibold">
+                                                Current R:R Ratio: 1:${results.rrRatio.toFixed(2)} - You need at least 1:2.00 to proceed.
+                                            </p>
+                                            <p class="text-sm text-red-200 mt-3">
+                                                Tip: Adjust your Take Profit higher or Stop Loss closer to improve your R:R ratio.
+                                            </p>
+                                        </div>
+                                    </div>
+                                ` : ''}
+                                
+                                <div class="bg-gradient-to-r from-blue-600/20 to-purple-600/20 border rounded-xl p-6 ${results.rrRatio < 2 ? 'border-red-500/50 opacity-60' : 'border-blue-500/30'}">
+                                    <h3 class="text-xl font-semibold text-white mb-4">Results</h3>
+                                    
+                                    <div class="grid md:grid-cols-3 gap-4 mb-4">
+                                        <div class="bg-slate-900/50 rounded-lg p-4">
+                                            <p class="text-slate-400 text-sm mb-1">Position Size</p>
+                                            <p class="text-2xl font-bold text-white">
+                                                ${results.positionSize.toLocaleString()} units
+                                            </p>
+                                            <p class="text-xs text-slate-400 mt-1">
+                                                ${state.lotSize} lot × ${getContractSize().toLocaleString()}
+                                            </p>
+                                        </div>
+
+                                        <div class="bg-red-900/30 rounded-lg p-4">
+                                            <p class="text-red-300 text-sm mb-1">Risk</p>
+                                            <p class="text-2xl font-bold text-red-400">
+                                                $${results.risk.toFixed(2)}
+                                            </p>
+                                            <p class="text-sm text-red-300 mt-1">
+                                                ${results.priceRisk.toFixed(5)} ${getPriceLabel()}
+                                            </p>
+                                        </div>
+
+                                        <div class="bg-green-900/30 rounded-lg p-4">
+                                            <p class="text-green-300 text-sm mb-1">Reward</p>
+                                            <p class="text-2xl font-bold text-green-400">
+                                                $${results.reward.toFixed(2)}
+                                            </p>
+                                            <p class="text-sm text-green-300 mt-1">
+                                                ${results.priceReward.toFixed(5)} ${getPriceLabel()}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div class="${results.rrRatio >= 2 ? 'bg-green-900/30 border-2 border-green-500' : 'bg-red-900/40 border-2 border-red-500'} rounded-lg p-6">
+                                        <div class="flex items-center justify-between">
+                                            <div>
+                                                <p class="text-sm text-slate-300 mb-1">Risk/Reward Ratio</p>
+                                                <p class="text-4xl font-bold text-white">
+                                                    1:${results.rrRatio.toFixed(2)}
+                                                </p>
+                                            </div>
+                                            <div class="text-right">
+                                                ${results.rrRatio >= 2 ? `
+                                                    <div class="flex items-center gap-2 text-green-400">
+                                                        <div class="text-4xl">✓</div>
+                                                        <span class="font-bold text-lg">ACCEPTED</span>
+                                                    </div>
+                                                ` : `
+                                                    <div class="flex items-center gap-2 text-red-400">
+                                                        <div class="text-4xl">✗</div>
+                                                        <span class="font-bold text-lg">REJECTED</span>
+                                                    </div>
+                                                `}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="bg-slate-700/30 rounded-lg p-4 border border-slate-600">
+                                    <p class="text-sm text-slate-300">
+                                        <strong class="text-white">Trading ${assetPresets[state.asset].name}:</strong> Contract size is ${getContractSize().toLocaleString()} units per lot. <strong class="text-red-400">Minimum R:R requirement: 1:2.00</strong> - Only positions with at least 1:2 risk/reward ratio will be accepted.
+                                    </p>
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+
+            // Attach event listeners
+            document.getElementById('asset').addEventListener('change', (e) => {
+                state.asset = e.target.value;
+                render();
+            });
+
+            document.getElementById('longBtn').addEventListener('click', () => {
+                state.tradeType = 'long';
+                render();
+            });
+
+            document.getElementById('shortBtn').addEventListener('click', () => {
+                state.tradeType = 'short';
+                render();
+            });
+
+            ['lotSize', 'customContractSize', 'entryPrice', 'stopLoss', 'takeProfit'].forEach(field => {
+                document.getElementById(field).addEventListener('input', (e) => {
+                    state[field] = e.target.value;
+                    render();
+                });
+            });
+        }
+
+        // Initial render
+        render();
+    </script>
+</body>
+</html>
