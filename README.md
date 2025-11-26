@@ -1,2 +1,2 @@
-# R-R-Calculator
+# RRCalculator
 Risk Reward calculator for Fund trading 
